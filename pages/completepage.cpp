@@ -24,12 +24,12 @@ CompletePage::CompletePage(QWidget *parent)
     titleLabel->setAlignment(Qt::AlignCenter);
     
     // 描述
-    QLabel *descLabel = new QLabel(tr("Ausic 已成功安装到您的计算机"), this);
+    QLabel *descLabel = new QLabel(tr("音触 已成功安装到您的计算机"), this);
     descLabel->setStyleSheet("color: #606266;");
     descLabel->setAlignment(Qt::AlignCenter);
     
     // 复选框
-    launchCheckBox = new QCheckBox(tr("立即启动 Ausic"), this);
+    launchCheckBox = new QCheckBox(tr("立即启动 音触"), this);
     launchCheckBox->setChecked(true);
     launchCheckBox->setStyleSheet(R"(
         QCheckBox {

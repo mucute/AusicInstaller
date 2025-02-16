@@ -31,7 +31,7 @@ InstallPage::InstallPage(QWidget *parent)
     titleLayout->setContentsMargins(0, 0, 0, 20);  // 添加底部边距
     titleLayout->setAlignment(Qt::AlignTop);
     
-    QLabel *titleLabel = new QLabel(tr("安装 Ausic"), this);
+    QLabel *titleLabel = new QLabel(tr("安装 音触"), this);
     titleLabel->setStyleSheet("font-size: 24px; font-weight: bold; color: #303133; padding: 0;");
     
     titleLayout->addWidget(titleLabel, 0, Qt::AlignBottom);
