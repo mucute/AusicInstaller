@@ -1,45 +1,73 @@
 #include <QApplication>
-#include "mainwindow.h"
-#include <QMessageBox>
-#include <windows.h>
 
-int main(int argc, char *argv[]) {
-    // 检查是否以管理员权限运行
-    BOOL isAdmin = FALSE;
-    PSID adminGroup = NULL;
-    SID_IDENTIFIER_AUTHORITY ntAuthority = SECURITY_NT_AUTHORITY;
+#include <QLoggingCategory>
+
+#include <io.h>
+#include <fcntl.h>
+#include <QStyleFactory>
+#include <QDir>
+
+#include "mainwindow.h"
+
+#ifdef _WIN32
+#include <windows.h>
+#include <io.h>
+#include <fcntl.h>
+
+#endif
+
+int main(int argc, char *argv[])
+{
+    QApplication app(argc, argv);
     
-    if (AllocateAndInitializeSid(&ntAuthority, 2, SECURITY_BUILTIN_DOMAIN_RID,
-                                DOMAIN_ALIAS_RID_ADMINS, 0, 0, 0, 0, 0, 0,
-                                &adminGroup)) {
-        CheckTokenMembership(NULL, adminGroup, &isAdmin);
-        FreeSid(adminGroup);
-    }
-    
-    // 如果不是管理员权限，重新以管理员权限启动
-    if (!isAdmin) {
-        SHELLEXECUTEINFO sei = {sizeof(sei)};
-        sei.lpVerb = L"runas";
-        sei.lpFile = (LPCWSTR)argv[0];
-        sei.nShow = SW_NORMAL;
+#ifdef _WIN32
+    // 在Windows下分配控制台窗口以显示调试输出
+    if (AllocConsole()) {
+        freopen_s((FILE**)stdout, "CONOUT$", "w", stdout);
+        freopen_s((FILE**)stderr, "CONOUT$", "w", stderr);
+        freopen_s((FILE**)stdin, "CONIN$", "r", stdin);
         
-        if (!ShellExecuteEx(&sei)) {
-            QMessageBox::critical(nullptr, QObject::tr("错误"),
-                QObject::tr("安装程序需要管理员权限才能继续。\n"
-                           "请右键点击安装程序，选择\"以管理员身份运行\"。"));
-            return 1;
-        }
-        return 0;
+        // 设置控制台标题
+        SetConsoleTitle(L"Ausic Installer Debug Console");
+        
+    
+
     }
+#endif
     
-    QApplication a(argc, argv);
+    // 设置应用程序信息
+    app.setApplicationName("Ausic Installer");
+    app.setApplicationVersion("1.0.0");
+    app.setOrganizationName("Ausic");
     
-    // 设置高DPI支持
-    QApplication::setAttribute(Qt::AA_EnableHighDpiScaling);
-    QApplication::setAttribute(Qt::AA_UseHighDpiPixmaps);
+    // 设置现代化样式
+    app.setStyle(QStyleFactory::create("Fusion"));
     
-    MainWindow w;
-    w.show();  // 确保窗口显示
+    // 设置深色主题
+    QPalette darkPalette;
+    darkPalette.setColor(QPalette::Window, QColor(53, 53, 53));
+    darkPalette.setColor(QPalette::WindowText, Qt::white);
+    darkPalette.setColor(QPalette::Base, QColor(25, 25, 25));
+    darkPalette.setColor(QPalette::AlternateBase, QColor(53, 53, 53));
+    darkPalette.setColor(QPalette::ToolTipBase, Qt::white);
+    darkPalette.setColor(QPalette::ToolTipText, Qt::white);
+    darkPalette.setColor(QPalette::Text, Qt::white);
+    darkPalette.setColor(QPalette::Button, QColor(53, 53, 53));
+    darkPalette.setColor(QPalette::ButtonText, Qt::white);
+    darkPalette.setColor(QPalette::BrightText, Qt::red);
+    darkPalette.setColor(QPalette::Link, QColor(42, 130, 218));
+    darkPalette.setColor(QPalette::Highlight, QColor(42, 130, 218));
+    darkPalette.setColor(QPalette::HighlightedText, Qt::black);
+    app.setPalette(darkPalette);
     
-    return QApplication::exec();
+    MainWindow window;
+    window.show();
+    
+
+    
+    int result = app.exec();
+    
+
+    
+    return result;
 }

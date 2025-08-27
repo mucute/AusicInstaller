@@ -14,12 +14,8 @@ set(PROJECT_SOURCES
         main.cpp
         mainwindow.cpp
         mainwindow.h
-        pages/installpage.cpp
-        pages/installpage.h
-        pages/progresspage.cpp
-        pages/progresspage.h
-        pages/completepage.cpp
-        pages/completepage.h
+        installer.cpp
+        installer.h
         resources.qrc
 )
 
@@ -33,7 +29,7 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
 
 # 添加对 Qt private 头文件的访问权限
 target_include_directories(${PROJECT_NAME} PRIVATE
-    ${Qt6Core_PRIVATE_INCLUDE_DIRS}
+        ${Qt6Core_PRIVATE_INCLUDE_DIRS}
 )
 
 if (WIN32)
@@ -85,17 +81,24 @@ if (WIN32)
 ]=])
 
     target_sources(${PROJECT_NAME} PRIVATE
-        "${CMAKE_CURRENT_BINARY_DIR}/installer.rc"
+            "${CMAKE_CURRENT_BINARY_DIR}/installer.rc"
     )
 endif ()
 
-add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E make_directory
-    "$<TARGET_FILE_DIR:${PROJECT_NAME}>/assets/"
-)
+# Find Python interpreter
+find_package(Python3 COMPONENTS Interpreter)
 
-add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy
-    "${CMAKE_SOURCE_DIR}/assets/app.zip"
-    "$<TARGET_FILE_DIR:${PROJECT_NAME}>/assets/"
-)
+# 编译完成后附加zip文件到exe
+if(Python3_FOUND)
+    add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:${PROJECT_NAME}> ${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}_final.exe
+            COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/append_zip.py ${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}_final.exe C:/Users/mucute/Desktop/Ausic.zip
+            COMMENT "Appending zip file to executable"
+    )
+else()
+    message(WARNING "Python3 not found, skipping zip append step")
+    add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:${PROJECT_NAME}> ${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}_final.exe
+            COMMENT "Copying executable without zip append"
+    )
+endif()

@@ -1,10 +1,8 @@
-<!DOCTYPE RCC>
-<RCC version="1.0">
+<RCC>
     <qresource prefix="/">
         <file>images/welcome.png</file>
         <file>images/installing.png</file>
         <file>images/success.png</file>
         <file>images/check.png</file>
-        <file>assets/app.zip</file>
     </qresource>
-</RCC> 
+</RCC>
