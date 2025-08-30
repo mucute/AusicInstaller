@@ -142,10 +142,65 @@ bool Installer::findArchiveInExecutable(const QString &exePath, qint64 &archiveO
     }
     
     qint64 fileSize = file.size();
-
     
-    // 首先从文件末尾查找ZIP结束记录，这是最可靠的方法
-    // ZIP结束记录的最小大小是22字节，最大是65557字节（包含注释）
+    // 新方法：查找魔术签名和元数据
+    const QByteArray MAGIC_SIGNATURE = QByteArray("AUSIC_ZIP_INFO");
+    const qint64 METADATA_SIZE = 14 + 8 + 8 + 4; // magic + offset + size + metadata_size
+    
+    if (fileSize < METADATA_SIZE) {
+        file.close();
+        return false;
+    }
+    
+    // 读取文件末尾的元数据
+    file.seek(fileSize - METADATA_SIZE);
+    QByteArray metadataBlock = file.read(METADATA_SIZE);
+    
+    if (metadataBlock.size() != METADATA_SIZE) {
+        file.close();
+        return false;
+    }
+    
+    // 检查魔术签名
+    QByteArray magic = metadataBlock.left(14);
+    if (magic == MAGIC_SIGNATURE) {
+        // 解析元数据
+        QDataStream stream(metadataBlock.mid(14));
+        stream.setByteOrder(QDataStream::LittleEndian);
+        
+        quint64 zipOffset, zipSize;
+        quint32 metadataSize;
+        
+        stream >> zipOffset >> zipSize >> metadataSize;
+        
+        // 验证数据的合理性
+        if (zipOffset < fileSize && zipSize > 0 && 
+            zipOffset + zipSize <= fileSize - METADATA_SIZE) {
+            
+            // 验证ZIP文件头
+            file.seek(zipOffset);
+            QByteArray header = file.read(4);
+            
+            if (header == ZIP_SIGNATURE) {
+                // 进一步验证ZIP文件的完整性
+                // 检查ZIP结束记录是否在预期位置
+                qint64 expectedEndPos = zipOffset + zipSize - 22;
+                if (expectedEndPos >= 0 && expectedEndPos < fileSize - 22) {
+                    file.seek(expectedEndPos);
+                    QByteArray endSig = file.read(4);
+                    if (endSig == ZIP_END_SIGNATURE) {
+                        archiveOffset = zipOffset;
+                        archiveSize = zipSize;
+                        file.close();
+                        return true;
+                    }
+                }
+            }
+        }
+    }
+    
+    // 备用方法：使用旧的ZIP结束记录查找方法
+    // 首先从文件末尾查找ZIP结束记录
     const qint64 maxEndRecordSize = 65557;
     qint64 searchStart = qMax(0LL, fileSize - maxEndRecordSize);
     
@@ -155,8 +210,6 @@ bool Installer::findArchiveInExecutable(const QString &exePath, qint64 &archiveO
     // 从后往前搜索ZIP结束记录
     for (int i = endData.size() - 22; i >= 0; i--) {
         if (endData.mid(i, 4) == ZIP_END_SIGNATURE) {
-
-            
             // 读取ZIP结束记录中的信息
             QDataStream stream(endData.mid(i));
             stream.setByteOrder(QDataStream::LittleEndian);
@@ -169,13 +222,10 @@ bool Installer::findArchiveInExecutable(const QString &exePath, qint64 &archiveO
             stream >> signature >> diskNumber >> startDisk >> entriesOnDisk 
                    >> totalEntries >> centralDirSize >> centralDirOffset >> commentLength;
             
-
-            
             // ZIP结束记录的绝对位置
             qint64 zipEndRecordPos = searchStart + i;
             
             // 根据中央目录偏移计算ZIP文件开始位置
-            // 中央目录偏移是相对于ZIP文件开始的
             qint64 zipStartPos = zipEndRecordPos - centralDirOffset - centralDirSize;
             
             // ZIP文件结束位置（包含结束记录和注释）
@@ -186,31 +236,39 @@ bool Installer::findArchiveInExecutable(const QString &exePath, qint64 &archiveO
             QByteArray header = file.read(4);
             
             if (header == ZIP_SIGNATURE && zipStartPos >= 0 && zipStartPos < fileSize) {
-                archiveOffset = zipStartPos;
-                archiveSize = zipEndPos - zipStartPos;
-
-                file.close();
-                return true;
-            } else {
-
+                // 验证计算出的ZIP大小是否合理
+                qint64 calculatedSize = zipEndPos - zipStartPos;
+                if (calculatedSize > 0 && calculatedSize < fileSize && 
+                    zipEndPos <= fileSize) {
+                    archiveOffset = zipStartPos;
+                    archiveSize = calculatedSize;
+                    file.close();
+                    return true;
+                }
             }
         }
     }
     
-
-    
-    // 备用方法：从文件末尾向前搜索ZIP文件头
-    const qint64 maxSearchSize = qMin(fileSize, 200 * 1024 * 1024LL); // 最多搜索200MB
+    // 最后的备用方法：从文件末尾向前搜索ZIP文件头
+    const qint64 maxSearchSize = qMin(fileSize, 200 * 1024 * 1024LL);
     
     for (qint64 pos = fileSize - 4; pos >= fileSize - maxSearchSize; pos--) {
         file.seek(pos);
         QByteArray header = file.read(4);
         
         if (header == ZIP_SIGNATURE) {
-            archiveOffset = pos;
-            archiveSize = fileSize - pos;
-            file.close();
-            return true;
+            qint64 potentialSize = fileSize - pos;
+            // 验证这个位置的ZIP文件是否有有效的结束记录
+            if (potentialSize >= 22) {
+                file.seek(fileSize - 22);
+                QByteArray endSig = file.read(4);
+                if (endSig == ZIP_END_SIGNATURE) {
+                    archiveOffset = pos;
+                    archiveSize = potentialSize;
+                    file.close();
+                    return true;
+                }
+            }
         }
     }
     
@@ -220,10 +278,15 @@ bool Installer::findArchiveInExecutable(const QString &exePath, qint64 &archiveO
 
 bool Installer::copyArchiveFromExecutable(const QString &exePath, qint64 offset, qint64 size, const QString &outputPath)
 {
-
-    
     QFile sourceFile(exePath);
     if (!sourceFile.open(QIODevice::ReadOnly)) {
+        return false;
+    }
+    
+    // 验证文件大小和偏移量的合理性
+    qint64 fileSize = sourceFile.size();
+    if (offset < 0 || size <= 0 || offset + size > fileSize) {
+        sourceFile.close();
         return false;
     }
     
@@ -232,32 +295,68 @@ bool Installer::copyArchiveFromExecutable(const QString &exePath, qint64 offset,
         return false;
     }
     
+    // 分块读取大文件，避免内存问题
+    const qint64 CHUNK_SIZE = 1024 * 1024; // 1MB chunks
     QFile outputFile(outputPath);
     if (!outputFile.open(QIODevice::WriteOnly)) {
         sourceFile.close();
         return false;
     }
     
-    // 直接读取所有数据
-    QByteArray archiveData = sourceFile.read(size);
+    qint64 totalBytesRead = 0;
+    qint64 totalBytesWritten = 0;
+    
+    while (totalBytesRead < size) {
+        qint64 bytesToRead = qMin(CHUNK_SIZE, size - totalBytesRead);
+        QByteArray chunk = sourceFile.read(bytesToRead);
+        
+        if (chunk.isEmpty() && bytesToRead > 0) {
+            // 读取失败
+            sourceFile.close();
+            outputFile.close();
+            QFile::remove(outputPath);
+            return false;
+        }
+        
+        qint64 bytesWritten = outputFile.write(chunk);
+        if (bytesWritten != chunk.size()) {
+            // 写入失败
+            sourceFile.close();
+            outputFile.close();
+            QFile::remove(outputPath);
+            return false;
+        }
+        
+        totalBytesRead += chunk.size();
+        totalBytesWritten += bytesWritten;
+    }
+    
     sourceFile.close();
     
-    if (archiveData.size() != size) {
-        outputFile.close();
-        return false;
-    }
-    
-    qint64 bytesWritten = outputFile.write(archiveData);
+    // 强制刷新到磁盘
+    outputFile.flush();
     outputFile.close();
     
-    if (bytesWritten != size) {
+    // 验证总字节数
+    if (totalBytesWritten != size) {
+        QFile::remove(outputPath);
         return false;
     }
     
-
-    
     // 验证提取的文件
-    return isValidZipFile(outputPath);
+    if (!isValidZipFile(outputPath)) {
+        QFile::remove(outputPath);
+        return false;
+    }
+    
+    // 额外验证：检查文件大小
+    QFileInfo outputInfo(outputPath);
+    if (outputInfo.size() != size) {
+        QFile::remove(outputPath);
+        return false;
+    }
+    
+    return true;
 }
 
 bool Installer::extractArchiveToDirectory(const QString &archivePath, const QString &targetDir)
@@ -308,19 +407,60 @@ bool Installer::extractArchiveToDirectory(const QString &archivePath, const QStr
             // 提取文件内容
             QByteArray fileData = zipReader.fileData(fileName);
             
-            QFile outputFile(fullPath);
-            if (outputFile.open(QIODevice::WriteOnly)) {
-                qint64 bytesWritten = outputFile.write(fileData);
-                outputFile.close();
-                
-                if (bytesWritten == fileData.size()) {
-                    extractedCount++;
-                } else {
-                    return false;
-                }
-            } else {
+            // 详细验证文件数据
+            if (fileInfo.size > 0 && fileData.isEmpty()) {
+                // 文件应该有内容但读取为空，这是一个严重错误
                 return false;
             }
+            
+            // 验证读取的数据大小是否与预期一致
+            if (fileData.size() != fileInfo.size) {
+                // 数据大小不匹配
+                return false;
+            }
+            
+            QFile outputFile(fullPath);
+            if (!outputFile.open(QIODevice::WriteOnly)) {
+                return false;
+            }
+            
+            qint64 bytesWritten = 0;
+            if (fileInfo.size > 0) {
+                // 对于非空文件，写入数据
+                bytesWritten = outputFile.write(fileData);
+                if (bytesWritten != fileData.size()) {
+                    outputFile.close();
+                    QFile::remove(fullPath);
+                    return false;
+                }
+            }
+            
+            // 强制刷新缓冲区到磁盘
+            if (!outputFile.flush()) {
+                outputFile.close();
+                QFile::remove(fullPath);
+                return false;
+            }
+            
+            outputFile.close();
+            
+            // 验证文件是否正确创建
+            QFileInfo createdFileInfo(fullPath);
+            if (!createdFileInfo.exists()) {
+                return false;
+            }
+            
+            // 验证文件大小
+            if (createdFileInfo.size() != fileInfo.size) {
+                QFile::remove(fullPath);
+                return false;
+            }
+            
+            extractedCount++;
+            
+            // 设置文件权限为可读写
+            outputFile.setPermissions(QFile::ReadOwner | QFile::WriteOwner | 
+                                    QFile::ReadGroup | QFile::ReadOther);
         }
     }
     
@@ -372,19 +512,78 @@ bool Installer::isValidZipFile(const QString &filePath)
     }
     
     qint64 fileSize = file.size();
-
-    
-    if (fileSize < 4) {
+    if (fileSize < 22) { // ZIP文件最小大小（包含中央目录结束记录）
         file.close();
         return false;
     }
     
-    // 只检查文件头是否为ZIP签名
+    // 检查文件头是否为ZIP签名
     QByteArray header = file.read(4);
     
+    if (header != ZIP_SIGNATURE) {
+        file.close();
+        return false;
+    }
+    
+    // 验证ZIP结束记录
+    file.seek(fileSize - 22);
+    QByteArray endRecord = file.read(22);
     file.close();
     
-    return (header == ZIP_SIGNATURE);
+    if (endRecord.size() != 22 || endRecord.left(4) != ZIP_END_SIGNATURE) {
+        return false;
+    }
+    
+    // 解析ZIP结束记录
+    QDataStream stream(endRecord);
+    stream.setByteOrder(QDataStream::LittleEndian);
+    
+    quint32 signature;
+    quint16 diskNumber, startDisk, entriesOnDisk, totalEntries;
+    quint32 centralDirSize, centralDirOffset;
+    quint16 commentLength;
+    
+    stream >> signature >> diskNumber >> startDisk >> entriesOnDisk 
+           >> totalEntries >> centralDirSize >> centralDirOffset >> commentLength;
+    
+    // 验证中央目录的位置和大小是否合理
+    if (centralDirOffset >= fileSize || 
+        centralDirSize == 0 || 
+        centralDirOffset + centralDirSize > fileSize - 22 - commentLength) {
+        return false;
+    }
+    
+    // 使用QZipReader进一步验证文件完整性
+    QZipReader zipReader(filePath);
+    if (!zipReader.isReadable()) {
+        return false;
+    }
+    
+    // 尝试获取文件列表并验证条目数量
+    QList<QZipReader::FileInfo> fileInfos = zipReader.fileInfoList();
+    
+    // 验证文件条目数量是否与ZIP结束记录一致
+    if (fileInfos.size() != totalEntries) {
+        zipReader.close();
+        return false;
+    }
+    
+    // 验证每个文件的完整性（检查前几个文件）
+    int checkCount = qMin(5, fileInfos.size()); // 只检查前5个文件避免性能问题
+    for (int i = 0; i < checkCount; i++) {
+        const QZipReader::FileInfo &info = fileInfos[i];
+        if (!info.isDir && info.size > 0) {
+            QByteArray data = zipReader.fileData(info.filePath);
+            // 如果文件应该有内容但读取为空，或大小不匹配，说明ZIP损坏
+            if (data.isEmpty() || data.size() != info.size) {
+                zipReader.close();
+                return false;
+            }
+        }
+    }
+    
+    zipReader.close();
+    return true;
 }
 
 void Installer::cleanupTempFiles()

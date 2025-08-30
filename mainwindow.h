@@ -79,7 +79,6 @@ private:
     QWidget *m_finishPage;
     QLabel *m_finishIcon;
     QLabel *m_finishTitle;
-    QLabel *m_finishMessage;
     QCheckBox *m_launchCheckBox;
     QPushButton *m_finishButton;
     

@@ -19,22 +19,7 @@
 int main(int argc, char *argv[])
 {
     QApplication app(argc, argv);
-    
-#ifdef _WIN32
-    // 在Windows下分配控制台窗口以显示调试输出
-    if (AllocConsole()) {
-        freopen_s((FILE**)stdout, "CONOUT$", "w", stdout);
-        freopen_s((FILE**)stderr, "CONOUT$", "w", stderr);
-        freopen_s((FILE**)stdin, "CONIN$", "r", stdin);
-        
-        // 设置控制台标题
-        SetConsoleTitle(L"Ausic Installer Debug Console");
-        
-    
 
-    }
-#endif
-    
     // 设置应用程序信息
     app.setApplicationName("Ausic Installer");
     app.setApplicationVersion("1.0.0");

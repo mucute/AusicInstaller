@@ -19,7 +19,7 @@ set(PROJECT_SOURCES
         resources.qrc
 )
 
-add_executable(${PROJECT_NAME} ${PROJECT_SOURCES})
+add_executable(${PROJECT_NAME} WIN32 ${PROJECT_SOURCES})
 
 target_link_libraries(${PROJECT_NAME} PRIVATE
         Qt6::Core
@@ -92,7 +92,8 @@ find_package(Python3 COMPONENTS Interpreter)
 if(Python3_FOUND)
     add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:${PROJECT_NAME}> ${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}_final.exe
-            COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/append_zip.py ${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}_final.exe C:/Users/mucute/Desktop/Ausic.zip
+            COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/append_zip.py ${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}_final.exe C:\\Users\\mucute\\ausic-workspace\\Ausic-app\\composeApp\\build\\compose\\binaries\\main-release\\app\\Ausic.zip
+#            COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/append_zip.py ${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}_final.exe C:/Users/mucute/Desktop/Ausic.zip
             COMMENT "Appending zip file to executable"
     )
 else()

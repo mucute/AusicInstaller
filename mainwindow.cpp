@@ -121,7 +121,7 @@ void MainWindow::setupWelcomePage()
     layout->setContentsMargins(30, 40, 30, 30);
     
     // 顶部间距
-    layout->addSpacing(20);
+    layout->addSpacing(100);
     
     // 图标容器布局
     QHBoxLayout *iconLayout = new QHBoxLayout();
@@ -407,19 +407,7 @@ void MainWindow::setupFinishPage()
         "    margin: 15px 0 10px 0;"
         "}"
     );
-    
-    // 消息
-    m_finishMessage = new QLabel();
-    m_finishMessage->setAlignment(Qt::AlignCenter);
-    m_finishMessage->setWordWrap(true);
-    m_finishMessage->setStyleSheet(
-        "QLabel {"
-        "    color: #666666;"
-        "    font-size: 14px;"
-        "    margin: 10px 0 30px 0;"
-        "}"
-    );
-    
+
     // 复选框
     m_launchCheckBox = new QCheckBox("立即运行 音触");
     m_launchCheckBox->setChecked(true);
@@ -457,7 +445,6 @@ void MainWindow::setupFinishPage()
     // 布局组装
     layout->addWidget(m_finishIcon, 0, Qt::AlignCenter);
     layout->addWidget(m_finishTitle);
-    layout->addWidget(m_finishMessage);
     layout->addSpacing(20);
     layout->addWidget(m_launchCheckBox, 0, Qt::AlignCenter);
     layout->addSpacing(30);
@@ -516,7 +503,6 @@ void MainWindow::showFinishPage(bool success)
             m_finishIcon->setText("✓");
         }
         m_finishTitle->setText("安装完成");
-        m_finishMessage->setText("音触已成功安装到您的计算机上。\n\n点击 \"完成\" 退出安装程序。");
     } else {
         m_finishIcon->setText("✗");
         m_finishIcon->setStyleSheet(
@@ -547,7 +533,6 @@ void MainWindow::showFinishPage(bool success)
             "    line-height: 1.2;"
             "}"
         );
-        m_finishMessage->setText("安装过程中发生错误，请检查日志信息并重试。\n\n如果问题持续存在，请联系技术支持。");
     }
     
     m_mainLayout->addWidget(m_finishPage);
